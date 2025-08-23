@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Robust P2P File Sharing with PeerJS & Tailwind</title>
+    <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* New terminal-like log styles */
+      .logs-container {
+        font-family: 'Courier New', Courier, monospace;
+        background-color: #1a202c; /* Gray-900 */
+        border: 1px solid #4a5568; /* Gray-700 */
+        color: #48bb78; /* Green-400 */
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .log-entry {
+        display: flex;
+        align-items: flex-start;
+        line-height: 1.4;
+      }
+      .log-entry .marker {
+        color: #f6ad55; /* Orange-300 */
+        margin-right: 0.5rem;
+      }
+      .log-entry.info .message {
+        color: #a0aec0; /* Gray-400 */
+      }
+      .log-entry.success .message {
+        color: #48bb78; /* Green-400 */
+      }
+      .log-entry.error .message {
+        color: #f56565; /* Red-400 */
+      }
+      .log-entry.system .message {
+        color: #63b3ed; /* Blue-400 */
+      }
+      .log-entry a {
+        color: #667eea; /* Indigo-500 */
+        text-decoration: underline;
+      }
+      .log-entry a:hover {
+        color: #4c51bf; /* Indigo-700 */
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
+    <div class="bg-white rounded-lg shadow-2xl max-w-md w-full p-6">
+      <h2 class="text-center text-3xl font-bold text-indigo-700 mb-6">P2P File Sharing</h2>
+      <div class="relative mb-5 group">
+        <label class="block mb-1 font-semibold text-gray-700">Your Peer ID</label>
+        <div id="myIdContainer" class="flex items-center space-x-2">
+          <div id="myId" class="flex-1 select-all bg-gray-100 p-3 rounded text-indigo-700 font-mono text-sm break-all group-hover:bg-gray-200 transition-colors duration-200"></div>
+          <button id="copyBtn" class="p-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition" title="Copy ID">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M8 2a2 2 0 00-2 2v2a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2V8a2 2 0 00-2-2h-2V4a2 2 0 00-2-2H8z" />
+              <path d="M10 8h2v2h2v2h-2v2h-2v-2h-2V10h2V8z" />
+            </svg>
+          </button>
+        </div>
+        <span id="copyFeedback" class="absolute -bottom-6 left-0 text-xs text-green-600 opacity-0 transition-opacity duration-300">Copied!</span>
+      </div>
+
+      <div class="mt-5">
+        <label for="connectToId" class="block mb-1 font-semibold text-gray-700">Connect to Peer ID</label>
+        <input type="text" id="connectToId" placeholder="Enter peer ID"
+               class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 font-mono text-sm" />
+        
+        <div class="mt-3 flex space-x-2">
+            <input type="password" id="passwordInput" placeholder="Optional password"
+                   class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 text-sm" />
+            <button id="connectBtn"
+                    class="w-2/5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+              Connect
+            </button>
+        </div>
+      </div>
+      
+      <div id="connectionStatus"
+           class="mt-4 text-center font-semibold text-gray-500 min-h-[1.5rem] transition-colors duration-200"></div>
+
+      <div id="fileTransferSection" class="mt-6 hidden">
+        <label class="block mb-1 font-semibold text-gray-700">Select File(s) to Send</label>
+        <label class="block w-full text-sm text-gray-500 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors duration-200">
+            <input type="file" id="fileInput" multiple class="hidden" />
+            <span class="p-3 block text-center">Choose file(s)</span>
+        </label>
+      </div>
+
+      <div id="logsContainer" class="logs-container">
+        </div>
+    </div>
+
+    <script>
+    const myIdElem = document.getElementById("myId");
+    const connectToIdElem = document.getElementById("connectToId");
+    const connectBtn = document.getElementById("connectBtn");
+    const passwordInput = document.getElementById("passwordInput");
+    const copyBtn = document.getElementById("copyBtn");
+    const copyFeedback = document.getElementById("copyFeedback");
+    const connectionStatus = document.getElementById("connectionStatus");
+    const fileInput = document.getElementById("fileInput");
+    const fileTransferSection = document.getElementById("fileTransferSection");
+    const logsContainer = document.getElementById("logsContainer");
+
+    let peer;
+    let connections = new Map();
+    const sentFiles = new Map();
+
+    const randomNames = [
+        "Aurora", "Jupiter", "Orion", "Celeste", "Nova", "Leo",
+        "Aether", "Caelum", "Vega", "Sirius", "Phoenix", "Lyra",
+        "Apollo", "Cosmos", "Solstice", "Helios", "Galactic"
+    ];
+
+    function getRandomName() {
+        return randomNames[Math.floor(Math.random() * randomNames.length)];
+    }
+
+    async function sha256(str) {
+        const textEncoder = new TextEncoder();
+        const data = textEncoder.encode(str);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    }
+
+    function log(message, type = 'info', sender = 'system') {
+        const time = new Date().toLocaleTimeString();
+        const entry = document.createElement("div");
+        entry.className = `log-entry ${type}`;
+        entry.innerHTML = `
+          <span class="marker">&gt;&gt;&gt;</span>
+          <span class="message">[${time}] ${message}</span>
+        `;
+        logsContainer.appendChild(entry);
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+    }
+
+    function createPeer(name = getRandomName()) {
+        if (peer) {
+            peer.destroy();
+        }
+        log(`Attempting to create peer with ID: ${name}...`, 'info');
+
+        peer = new Peer(name, { secure: true });
+
+        peer.on("open", id => {
+            myIdElem.textContent = id;
+            connectionStatus.textContent = "Ready to connect";
+            log(`Peer created with ID: ${id}.`, 'success');
+        });
+
+        peer.on("connection", (conn) => {
+            handleIncomingConnection(conn);
+        });
+
+        peer.on('disconnected', () => {
+            log('Peer connection to server lost. Reconnecting...', 'error');
+            setTimeout(() => peer.reconnect(), 5000);
+        });
+
+        peer.on('error', (err) => {
+            if (err.type === 'unavailable-id') {
+                const newName = prompt(`The ID "${name}" is unavailable. Please enter a new name:`);
+                if (newName) {
+                    createPeer(newName);
+                } else {
+                    log('Peer creation cancelled. Refresh the page to try again.', 'error');
+                }
+            } else if (err.type === 'peer-unavailable') {
+                log('The peer ID you tried to connect to does not exist.', 'error');
+            } else {
+                log(`Peer error: ${err.type}`, 'error');
+            }
+        });
+    }
+
+    function handleIncomingConnection(conn) {
+        if (connections.has(conn.peer)) {
+            log(`Connection already exists with peer ${conn.peer}. Rejecting new connection.`, 'error');
+            conn.close();
+            return;
+        }
+
+        let passwordTimeout;
+        const passwordRequestElem = document.createElement('div');
+        passwordRequestElem.className = 'log-entry system flex items-center flex-wrap gap-2 text-white bg-gray-800 p-2 rounded mt-2';
+        passwordRequestElem.innerHTML = `
+          <span class="marker">&gt;&gt;&gt;</span>
+          <span>Incoming connection from ${conn.peer}. Enter password:</span>
+          <input type="password" placeholder="Password" class="flex-1 p-1 rounded bg-gray-900 text-green-400 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-400 min-w-[100px]" />
+          <button class="bg-indigo-600 hover:bg-indigo-700 text-white p-1 rounded min-w-[60px] transition-colors duration-200">Verify</button>
+        `;
+        logsContainer.appendChild(passwordRequestElem);
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+
+        const passwordInputElem = passwordRequestElem.querySelector('input');
+        const verifyBtn = passwordRequestElem.querySelector('button');
+
+        passwordTimeout = setTimeout(() => {
+            log(`Connection request from ${conn.peer} timed out.`, 'error');
+            conn.send({ type: 'auth-response', payload: { success: false } });
+            conn.close();
+            passwordRequestElem.remove();
+        }, 5 * 60 * 1000); // 5 minutes
+
+        conn.once('data', async (data) => {
+            if (data.type === 'auth') {
+                verifyBtn.onclick = async () => {
+                    clearTimeout(passwordTimeout);
+                    const enteredPasswordHash = await sha256(passwordInputElem.value || '');
+
+                    if (enteredPasswordHash === data.payload.passwordHash) {
+                        log(`Password from ${conn.peer} is correct. Establishing connection.`, 'success');
+                        conn.send({ type: 'auth-response', payload: { success: true } });
+                        connections.set(conn.peer, conn);
+                        setupConnection(conn, data.payload.sentFiles);
+                        passwordRequestElem.remove();
+                    } else {
+                        log(`Invalid password from ${conn.peer}. Rejecting connection.`, 'error');
+                        conn.send({ type: 'auth-response', payload: { success: false } });
+                        setTimeout(() => conn.close(), 500);
+                        passwordRequestElem.remove();
+                    }
+                };
+            } else {
+                log(`First message from ${conn.peer} was not an authentication request. Closing connection.`, 'error');
+                conn.close();
+                passwordRequestElem.remove();
+                clearTimeout(passwordTimeout);
+            }
+        });
+    }
+
+    function setupConnection(conn, remoteSentFiles = []) {
+        const statusText = Array.from(connections.keys()).join(', ');
+        connectionStatus.textContent = `Connected to: ${statusText}`;
+        fileTransferSection.classList.remove("hidden");
+        log(`Connection established with: ${conn.peer}`, 'success');
+
+        if (remoteSentFiles.length > 0) {
+            log(`Checking for unsent files from ${conn.peer}...`, 'system');
+            conn.send({ type: 'check-files', payload: { myFiles: Array.from(sentFiles.keys()) } });
+        }
+
+        conn.on("data", async (data) => {
+            if (data.type === 'file') {
+                receiveFile(data.payload, conn.peer);
+            } else if (data.type === 'auth-response') {
+                if (!data.payload.success) {
+                    log(`Authentication failed with ${conn.peer}. Closing connection.`, 'error');
+                    conn.close();
+                    connections.delete(conn.peer);
+                }
+            } else if (data.type === 'check-files') {
+                const myMissingFiles = Array.from(sentFiles.keys()).filter(file => !data.payload.myFiles.includes(file));
+                if (myMissingFiles.length > 0) {
+                    const resendPrompt = document.createElement('div');
+                    resendPrompt.className = 'log-entry error flex items-center flex-wrap gap-2 text-white bg-gray-800 p-2 rounded mt-2';
+                    resendPrompt.innerHTML = `
+                        <span class="marker">&gt;&gt;&gt;</span>
+                        <span class="text-sm">Found ${myMissingFiles.length} unsent file(s) for ${conn.peer}: ${myMissingFiles.join(', ')}.</span>
+                        <button class="resend-btn bg-red-600 hover:bg-red-700 text-white p-1 rounded text-xs">Resend</button>
+                    `;
+                    logsContainer.appendChild(resendPrompt);
+                    logsContainer.scrollTop = logsContainer.scrollHeight;
+
+                    resendPrompt.querySelector('.resend-btn').onclick = () => {
+                        myMissingFiles.forEach(fileName => {
+                            const fileData = sentFiles.get(fileName);
+                            conn.send({ type: 'file', payload: fileData });
+                            log(`Resent file: "${fileName}" to ${conn.peer}`, 'success');
+                        });
+                        resendPrompt.remove();
+                    };
+                }
+            }
+        });
+
+        conn.on("close", () => {
+            connections.delete(conn.peer);
+            const statusText = Array.from(connections.keys()).join(', ');
+            connectionStatus.textContent = statusText ? `Connected to: ${statusText}` : "Ready to connect";
+            if (connections.size === 0) {
+                fileTransferSection.classList.add("hidden");
+            }
+            log(`Connection closed with ${conn.peer}`, 'info');
+        });
+
+        conn.on("error", err => {
+            log(`Connection error with ${conn.peer}: ${err}`, 'error');
+        });
+    }
+
+    connectBtn.onclick = async () => {
+        const remoteId = connectToIdElem.value.trim();
+        const password = passwordInput.value;
+
+        if (!remoteId) {
+            log("Please enter a remote peer ID.", 'error');
+            return;
+        }
+
+        if (remoteId === myIdElem.textContent) {
+            log("Cannot connect to yourself. Please enter a different ID.", 'error');
+            return;
+        }
+
+        if (connections.has(remoteId)) {
+            log("Already connected to this peer.", 'error');
+            return;
+        }
+
+        log(`Attempting connection to ${remoteId}...`, 'info');
+        const conn = peer.connect(remoteId);
+
+        conn.on("open", async () => {
+            const passwordHash = await sha256(password);
+            conn.send({ type: 'auth', payload: { passwordHash, sentFiles: Array.from(sentFiles.keys()) } });
+
+            conn.once('data', (data) => {
+                if (data.type === 'auth-response') {
+                    if (data.payload.success) {
+                        log("Password accepted. Connection authenticated.", 'success');
+                        connections.set(remoteId, conn);
+                        setupConnection(conn);
+                    } else {
+                        log("Password rejected by remote peer. Closing connection.", 'error');
+                        conn.close();
+                    }
+                }
+            });
+        });
+
+        conn.on("error", err => {
+            log(`Connection error: ${err}`, 'error');
+        });
+    };
+
+    fileInput.onchange = () => {
+        const files = fileInput.files;
+        if (files.length === 0) return;
+
+        if (connections.size === 0) {
+            log("Please connect to at least one peer before sending files.", 'error');
+            fileInput.value = "";
+            return;
+        }
+
+        for (const file of files) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const fileData = {
+                    filename: file.name,
+                    filetype: file.type,
+                    data: e.target.result,
+                };
+
+                sentFiles.set(file.name, fileData);
+
+                const sentFileMarker = document.createElement('div');
+                sentFileMarker.className = 'log-entry success';
+                sentFileMarker.innerHTML = `
+                    <span class="marker">&gt;&gt;&gt;</span>
+                    <span class="message">[${new Date().toLocaleTimeString()}] Sent file: <a href="#" onclick="return false;">${file.name}</a></span>
+                `;
+                logsContainer.appendChild(sentFileMarker);
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+
+                connections.forEach(conn => {
+                    conn.send({ type: 'file', payload: fileData });
+                    log(`Sent file: "${file.name}" to ${conn.peer}`, 'success');
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        fileInput.value = "";
+    };
+
+    function receiveFile(fileObj, fromPeer) {
+        const { filename, filetype, data } = fileObj;
+        const blob = new Blob([data], { type: filetype });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.textContent = `${filename}`;
+
+        const receivedFileElem = document.createElement('div');
+        receivedFileElem.className = 'log-entry success';
+        receivedFileElem.innerHTML = `
+            <span class="marker">&gt;&gt;&gt;</span>
+            <span class="message">[${new Date().toLocaleTimeString()}] Received file from ${fromPeer}: </span>
+        `;
+        receivedFileElem.appendChild(link);
+
+        log(`Received file: "${filename}" from ${fromPeer}`, 'success');
+        logsContainer.appendChild(receivedFileElem);
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+    }
+
+    copyBtn.onclick = () => {
+        navigator.clipboard.writeText(myIdElem.textContent).then(() => {
+            copyFeedback.classList.add('opacity-100');
+            setTimeout(() => {
+                copyFeedback.classList.remove('opacity-100');
+            }, 1500);
+        }).catch(err => {
+            log('Failed to copy ID: ' + err, 'error');
+        });
+    };
+
+    createPeer();
+</script>
+
+  </body>
+</html>
