@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
   <head>
@@ -307,13 +308,13 @@
                     const enteredPasswordHash = await sha256(passwordInputElem.value || '');
 
                     if (enteredPasswordHash === data.payload.passwordHash) {
-                        log(`Password from ${conn.peer} is correct. Establishing connection.`, 'success');
+                        log(`${conn.peer} accepted password.\nEstablishing connection.`, 'success');
                         conn.send({ type: 'auth-response', payload: { success: true } });
                         connections.set(conn.peer, conn);
                         setupConnection(conn, data.payload.sentFiles);
                         passwordRequestElem.remove();
                     } else {
-                        log(`Invalid password from ${conn.peer}. Rejecting connection.`, 'error');
+                        log(`${conn.peer} denied entered password.\nRejecting connection.`, 'error');
                         conn.send({ type: 'auth-response', payload: { success: false } });
                         setTimeout(() => conn.close(), 500);
                         passwordRequestElem.remove();
@@ -417,11 +418,11 @@
             conn.once('data', (data) => {
                 if (data.type === 'auth-response') {
                     if (data.payload.success) {
-                        log("Password accepted. Connection authenticated.", 'success');
+                        log("Password entered by remote peer is correct.\nConnection authenticated.", 'success');
                         connections.set(remoteId, conn);
                         setupConnection(conn);
                     } else {
-                        log("Password rejected by remote peer. Closing connection.", 'error');
+                        log("Password entered by remote peer is wrong.\nClosing connection.", 'error');
                         conn.close();
                     }
                 }
