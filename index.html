@@ -1,10 +1,15 @@
-
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Robust P2P File Sharing with PeerJS & Tailwind</title>
+    <meta name="theme-color" content="#4f46e5" />
+    <meta name="description" content="Secure peer-to-peer file sharing that works offline" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>FL-SH | P2P File Sharing</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
     <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -102,6 +107,11 @@
     </style>
   </head>
   <body class="bg-gray-50 min-h-screen flex items-center justify-center p-6">
+    <!-- Offline status bar -->
+    <div id="offlineStatus" class="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 z-50 hidden">
+      You're offline. P2P connections on the same network will still work.
+    </div>
+    
     <div id="idModal" class="modal">
       <div class="modal-content text-center">
         <h3 class="text-2xl font-bold text-gray-800 mb-4">Enter Your Peer ID</h3>
@@ -122,6 +132,14 @@
     
     <div id="mainContent" class="bg-white rounded-lg shadow-2xl max-w-md w-full p-6 hidden">
       <h2 class="text-center text-3xl font-bold text-indigo-700 mb-6">P2P File Sharing</h2>
+      
+      <!-- PWA Install Button - Hidden by default, shown when installation is available -->
+      <button id="installPwa" class="hidden w-full mb-4 bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700 transition-colors duration-200 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+        </svg>
+        Install App
+      </button>
       <div class="relative mb-5 group">
         <label class="block mb-1 font-semibold text-gray-700">Your Peer ID</label>
         <div id="myIdContainer" class="flex items-center space-x-2">
@@ -526,5 +544,8 @@
       }
     };
     </script>
+    
+    <!-- PWA functionality -->
+    <script src="pwa.js"></script>
   </body>
 </html>
