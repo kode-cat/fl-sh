@@ -2,7 +2,7 @@
   "name": "FL-SH P2P File Sharing",
   "short_name": "FL-SH",
   "description": "Secure peer-to-peer file sharing that works offline",
-  "start_url": "/fl-sh/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",
@@ -57,4 +57,3 @@
     }
   ]
 }
-

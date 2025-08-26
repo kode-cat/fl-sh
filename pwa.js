@@ -44,7 +44,11 @@ if (installButton) {
 // Register service worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/fl-sh/sw.js')
+    // Determine the correct path for the service worker
+    const swPath = location.pathname.includes('/fl-sh/') ? '/fl-sh/sw.js' : '/sw.js';
+    
+    // Register the service worker
+    navigator.serviceWorker.register(swPath)
       .then(registration => {
         console.log('ServiceWorker registration successful with scope: ', registration.scope);
         
@@ -61,6 +65,16 @@ if ('serviceWorker' in navigator) {
       })
       .catch(error => {
         console.error('ServiceWorker registration failed: ', error);
+        
+        // Try with a relative path as fallback
+        console.log('Trying fallback service worker registration...');
+        navigator.serviceWorker.register('./sw.js')
+          .then(registration => {
+            console.log('Fallback ServiceWorker registration successful with scope: ', registration.scope);
+          })
+          .catch(fallbackError => {
+            console.error('Fallback ServiceWorker registration also failed: ', fallbackError);
+          });
       });
       
     // Handle controller change (when a new service worker takes over)
@@ -102,10 +116,20 @@ function updateOnlineStatus() {
   if (offlineStatusBar) {
     if (!isOnline) {
       offlineStatusBar.classList.remove('hidden');
-      log('App is running in offline mode. P2P connections on the same network will still work.', 'system');
+      // Use the log function if it exists, otherwise use console
+      if (typeof log === 'function') {
+        log('App is running in offline mode. P2P connections on the same network will still work.', 'system');
+      } else {
+        console.log('App is running in offline mode. P2P connections on the same network will still work.');
+      }
     } else {
       offlineStatusBar.classList.add('hidden');
-      log('App is back online.', 'success');
+      // Use the log function if it exists, otherwise use console
+      if (typeof log === 'function') {
+        log('App is back online.', 'success');
+      } else {
+        console.log('App is back online.');
+      }
     }
   }
   
@@ -115,6 +139,38 @@ function updateOnlineStatus() {
     // Even in offline mode, local network connections should work
     // connectBtn.disabled = !isOnline;
   }
+  
+  // If we're offline, preemptively load the offline PeerJS fallback
+  if (!isOnline && !window._offlinePeerJSLoaded) {
+    loadOfflinePeerJSFallback();
+  }
+}
+
+// Load the offline PeerJS fallback
+function loadOfflinePeerJSFallback() {
+  // Check if we've already tried to load it
+  if (window._offlinePeerJSLoaded) return;
+  window._offlinePeerJSLoaded = true;
+  
+  // Try to fetch the fallback from cache
+  fetch('./offline-peerjs-fallback.js')
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to load offline PeerJS fallback');
+      return response.text();
+    })
+    .then(scriptText => {
+      // Only execute if PeerJS is not already available
+      if (typeof Peer === 'undefined') {
+        // Create and execute the script
+        const script = document.createElement('script');
+        script.textContent = scriptText;
+        document.head.appendChild(script);
+        console.log('Loaded offline PeerJS fallback');
+      }
+    })
+    .catch(err => {
+      console.error('Error loading offline PeerJS fallback:', err);
+    });
 }
 
 // Listen for online/offline events
@@ -123,4 +179,3 @@ window.addEventListener('offline', updateOnlineStatus);
 
 // Initial check
 updateOnlineStatus();
-

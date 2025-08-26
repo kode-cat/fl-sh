@@ -1,0 +1,20 @@
+This is a placeholder file to ensure the icons directory is created.
+
+For a real implementation, you would need to create actual PNG icons in the following sizes:
+- 72x72
+- 96x96
+- 128x128
+- 144x144
+- 152x152
+- 192x192
+- 384x384
+- 512x512
+
+You can use online tools like:
+1. https://app-manifest.firebaseapp.com/
+2. https://www.pwabuilder.com/
+3. https://maskable.app/editor
+
+Or for testing, you can use placeholder services like:
+https://via.placeholder.com/512x512.png
+
